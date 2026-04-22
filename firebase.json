@@ -1,0 +1,39 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "gocode-app",
+          "appId": "1:1046344754665:android:d4b34ba33e52ed888d9778",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "gocode-app",
+          "configurations": {
+            "android": "1:1046344754665:android:d4b34ba33e52ed888d9778",
+            "ios": "1:1046344754665:ios:4543ab8f3af4a2a78d9778",
+            "macos": "1:1046344754665:ios:4543ab8f3af4a2a78d9778",
+            "web": "1:1046344754665:web:4180ad186f2c489b8d9778",
+            "windows": "1:1046344754665:web:1c17c58f110bdc728d9778"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build\\web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
