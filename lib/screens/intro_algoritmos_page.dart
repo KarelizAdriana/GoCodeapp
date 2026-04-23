@@ -11,18 +11,26 @@ class IntroAlgoritmosPage extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    await FirebaseFirestore.instance
+    final progresoRef = FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .collection('progreso')
-        .doc('introduccion_algoritmos')
-        .set({
-          'teoriaVista': true,
-          'completado': false,
-          'ejerciciosCorrectos': 0,
-          'ejerciciosIntentados': 0,
-          'ultimoEjercicio': '1',
-        }, SetOptions(merge: true));
+        .doc('introduccion_algoritmos');
+
+    final doc = await progresoRef.get();
+    final data = doc.data();
+
+    await progresoRef.set({
+      'teoriaVista': true,
+      'completado': data?['completado'] ?? false,
+      'ejerciciosCorrectos': data?['ejerciciosCorrectos'] ?? 0,
+      'ejerciciosIntentados': data?['ejerciciosIntentados'] ?? 0,
+      'ultimoEjercicio':
+          (data?['ultimoEjercicio'] ?? 1) < 1
+              ? 1
+              : (data?['ultimoEjercicio'] ?? 1),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   @override

@@ -5,6 +5,7 @@ import '../services/google_auth_service.dart';
 import 'home_page.dart';
 import 'register_page.dart';
 import 'welcome_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -31,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   String? validarCorreo(String? value) {
-    final correo = value?.trim() ?? '';
+    final correo = value?.trim().toLowerCase() ?? '';
 
     if (correo.isEmpty) {
       return 'Escribe tu correo';
@@ -76,7 +77,7 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final credencial = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: correoController.text.trim(),
+        email: correoController.text.trim().toLowerCase(),
         password: passwordController.text.trim(),
       );
 
@@ -109,7 +110,7 @@ class _LoginPageState extends State<LoginPage> {
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      String mensaje = 'Ocurri\u00f3 un error. Inténtalo otra vez.';
+      String mensaje = 'Ocurrió un error. Inténtalo otra vez.';
 
       if (e.code == 'invalid-email') {
         mensaje = 'Ese correo no se ve válido';
@@ -196,6 +197,309 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> mostrarVentanaRecuperarPassword() async {
+    final email = correoController.text.trim().toLowerCase();
+
+    FocusScope.of(context).unfocus();
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Primero escribe tu correo')),
+      );
+      return;
+    }
+
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Escribe un correo válido')));
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        final navigator = Navigator.of(dialogContext);
+        final messenger = ScaffoldMessenger.of(context);
+
+        bool cargandoEnvio = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> enviarEnlace() async {
+              if (cargandoEnvio) return;
+
+              setDialogState(() {
+                cargandoEnvio = true;
+              });
+
+              try {
+                final consulta =
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .where('correo', isEqualTo: email)
+                        .limit(1)
+                        .get();
+
+                if (!mounted) return;
+
+                if (consulta.docs.isEmpty) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('No encontramos una cuenta con ese correo'),
+                    ),
+                  );
+                  return;
+                }
+
+                await FirebaseAuth.instance.sendPasswordResetEmail(
+                  email: email,
+                );
+
+                if (!mounted) return;
+
+                navigator.pop();
+
+                await showDialog(
+                  context: this.context,
+                  builder: (successContext) {
+                    return AlertDialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      title: const Text(
+                        'Enlace enviado',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF101828),
+                        ),
+                      ),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Te enviamos un enlace para restablecer tu contraseña a:',
+                            style: TextStyle(
+                              color: Color(0xFF475467),
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFD),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFFD7DFEE),
+                              ),
+                            ),
+                            child: Text(
+                              email,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF101828),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Revisa tu bandeja de entrada y también spam o promociones.',
+                            style: TextStyle(
+                              color: Color(0xFF667085),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(successContext);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0E2A52),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: const Text(
+                              'ENTENDIDO',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              } on FirebaseAuthException catch (e) {
+                String mensaje =
+                    'No se pudo enviar el enlace. Inténtalo otra vez.';
+
+                if (e.code == 'invalid-email') {
+                  mensaje = 'Ese correo no es válido';
+                } else if (e.code == 'network-request-failed') {
+                  mensaje = 'No hay conexión a internet';
+                } else if (e.code == 'too-many-requests') {
+                  mensaje = 'Demasiados intentos. Espera un momento';
+                }
+
+                if (!mounted) return;
+
+                messenger.showSnackBar(SnackBar(content: Text(mensaje)));
+              } catch (_) {
+                if (!mounted) return;
+
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Ocurrió un error inesperado')),
+                );
+              } finally {
+                if (mounted) {
+                  setDialogState(() {
+                    cargandoEnvio = false;
+                  });
+                }
+              }
+            }
+
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 24,
+              ),
+              child: Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(maxWidth: 390),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: const Color(0xFFD7DFEE)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '¿Olvidaste tu contraseña?',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF101828),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Te enviaremos un enlace de recuperación al correo que escribiste en el inicio de sesión.',
+                      style: TextStyle(fontSize: 14, color: Color(0xFF475467)),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFD),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFD7DFEE)),
+                      ),
+                      child: Text(
+                        email,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF101828),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Asegúrate de que el correo esté bien escrito antes de continuar.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF667085)),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed:
+                                cargandoEnvio
+                                    ? null
+                                    : () {
+                                      navigator.pop();
+                                    },
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFD7DFEE)),
+                              padding: const EdgeInsets.symmetric(vertical: 15),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancelar',
+                              style: TextStyle(
+                                color: Color(0xFF0E2A52),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: cargandoEnvio ? null : enviarEnlace,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0E2A52),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 15),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child:
+                                cargandoEnvio
+                                    ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                    : const Text(
+                                      'ENVIAR',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -222,7 +526,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Aprende programación explorando el universo del c\u00f3digo',
+                    'Aprende programación explorando el universo del código',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFF475467), fontSize: 14),
                   ),
@@ -349,9 +653,9 @@ class _LoginPageState extends State<LoginPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () {},
+                                  onPressed: mostrarVentanaRecuperarPassword,
                                   child: const Text(
-                                    '\u00bfOlvidaste tu contraseña?',
+                                    '¿Olvidaste tu contraseña?',
                                     style: TextStyle(
                                       color: Color(0xFF0E2A52),
                                       fontSize: 12,

@@ -41,11 +41,11 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
     final password = value ?? '';
 
     if (password.isEmpty) {
-      return 'Escribe tu contrase\u00f1a';
+      return 'Escribe tu contraseña';
     }
 
     if (password.length < 6) {
-      return 'Tu contrase\u00f1a debe tener al menos 6 caracteres';
+      return 'Tu contraseña debe tener al menos 6 caracteres';
     }
 
     return null;
@@ -55,11 +55,11 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
     final confirmar = value ?? '';
 
     if (confirmar.isEmpty) {
-      return 'Confirma tu contrase\u00f1a';
+      return 'Confirma tu contraseña';
     }
 
     if (confirmar != passwordController.text) {
-      return 'La contrase\u00f1a y la confirmaci\u00f3n deben ser iguales';
+      return 'La contraseña y la confirmación deben ser iguales';
     }
 
     return null;
@@ -71,7 +71,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Escribe tu contrase\u00f1a y conf\u00edrmala correctamente'),
+          content: Text('Escribe tu contraseña y confírmala correctamente'),
         ),
       );
       return;
@@ -84,7 +84,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
     try {
       final credencial = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
-            email: widget.correo,
+            email: widget.correo.toLowerCase(),
             password: passwordController.text.trim(),
           );
 
@@ -104,7 +104,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
         'nombre': widget.nombre,
         'apellido': widget.apellido,
         'nombreCompleto': nombreCompleto,
-        'correo': widget.correo,
+        'correo': widget.correo.toLowerCase(),
         'nivelActual': 1,
         'puntos': 0,
         'activo': true,
@@ -117,7 +117,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Cuenta creada. Revisa tu correo ${widget.correo} para verificarlo',
+            'Cuenta creada. Revisa tu correo ${widget.correo.toLowerCase()} para verificarlo',
           ),
         ),
       );
@@ -128,16 +128,16 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      String mensaje = 'Ocurri\u00f3 un error al crear la cuenta';
+      String mensaje = 'Ocurrió un error al crear la cuenta';
 
       if (e.code == 'email-already-in-use') {
-        mensaje = 'Ese correo ya est\u00e1 registrado';
+        mensaje = 'Ese correo ya está registrado';
       } else if (e.code == 'invalid-email') {
-        mensaje = 'Ese correo no es v\u00e1lido';
+        mensaje = 'Ese correo no es válido';
       } else if (e.code == 'weak-password') {
-        mensaje = 'La contrase\u00f1a es muy d\u00e9bil';
+        mensaje = 'La contraseña es muy débil';
       } else if (e.code == 'network-request-failed') {
-        mensaje = 'No hay conexi\u00f3n a internet';
+        mensaje = 'No hay conexión a internet';
       }
 
       if (!mounted) return;
@@ -147,7 +147,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error inesperado. Int\u00e9ntalo otra vez')),
+        const SnackBar(content: Text('Error inesperado. Inténtalo otra vez')),
       );
     } finally {
       if (mounted) {
@@ -163,7 +163,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFD),
       appBar: AppBar(
-        title: const Text('Registro - Paso 2'),
+        title: const Text('Configura tu contraseña'),
         backgroundColor: const Color(0xFFFFFFFF),
         foregroundColor: const Color(0xFF101828),
         surfaceTintColor: Colors.transparent,
@@ -178,7 +178,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
               child: Column(
                 children: [
                   const Text(
-                    'Crea tu contrase\u00f1a',
+                    'Crea tu contraseña',
                     style: TextStyle(
                       color: Color(0xFF101828),
                       fontSize: 28,
@@ -187,7 +187,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    'Escribe tu contrase\u00f1a y luego conf\u00edrmala igual en ambos campos',
+                    'Escribe tu contraseña y luego confírmala igual en ambos campos',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFF475467)),
                   ),
@@ -197,7 +197,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                     obscureText: ocultarPassword,
                     style: const TextStyle(color: Color(0xFF101828)),
                     decoration: _inputDecoration(
-                      'Escribe tu contrase\u00f1a',
+                      'Escribe tu contraseña',
                       suffixIcon: IconButton(
                         onPressed: () {
                           setState(() {
@@ -220,7 +220,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                     obscureText: ocultarConfirmPassword,
                     style: const TextStyle(color: Color(0xFF101828)),
                     decoration: _inputDecoration(
-                      'Confirma tu contrase\u00f1a',
+                      'Confirma tu contraseña',
                       suffixIcon: IconButton(
                         onPressed: () {
                           setState(() {

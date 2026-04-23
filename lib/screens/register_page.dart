@@ -6,6 +6,7 @@ import 'home_page.dart';
 import 'login_page.dart';
 import 'register_password_page.dart';
 import 'welcome_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -95,19 +96,43 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    if (!mounted) return;
+    final email = correoController.text.trim().toLowerCase();
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (_) => RegisterPasswordPage(
-              nombre: nombreController.text.trim(),
-              apellido: apellidoController.text.trim(),
-              correo: correoController.text.trim(),
-            ),
-      ),
-    );
+    try {
+      final consulta =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .where('correo', isEqualTo: email)
+              .limit(1)
+              .get();
+
+      if (!mounted) return;
+
+      if (consulta.docs.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ese correo ya está registrado')),
+        );
+        return;
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (_) => RegisterPasswordPage(
+                nombre: nombreController.text.trim(),
+                apellido: apellidoController.text.trim(),
+                correo: email, //
+              ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al verificar el correo')),
+      );
+    }
   }
 
   Future<void> iniciarConGoogle() async {
@@ -227,7 +252,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                     padding: EdgeInsets.symmetric(vertical: 12),
                                     child: Center(
                                       child: Text(
-                                        'Iniciar Sesi\u00f3n',
+                                        'Iniciar Sesión',
                                         style: TextStyle(
                                           color: Color(0xFF475467),
                                           fontWeight: FontWeight.w600,
@@ -297,7 +322,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               const SizedBox(height: 16),
                               _tituloCampo(
                                 icon: Icons.mail_outline,
-                                texto: 'Correo electr\u00f3nico',
+                                texto: 'Correo electrónico',
                               ),
                               const SizedBox(height: 8),
                               TextFormField(
@@ -343,7 +368,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             Padding(
                               padding: EdgeInsets.symmetric(horizontal: 12),
                               child: Text(
-                                'o contin\u00faa con',
+                                'o continúa con',
                                 style: TextStyle(
                                   color: Color(0xFF667085),
                                   fontSize: 12,
