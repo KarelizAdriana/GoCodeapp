@@ -14,6 +14,7 @@ class EjercicioAlgoritmosPage extends StatefulWidget {
 
 class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
   Map<String, dynamic>? ejercicio;
+  String? ejercicioId;
 
   bool cargando = true;
   bool guardando = false;
@@ -25,6 +26,18 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
   bool correcta = false;
   bool mostrarPremio = false;
 
+  static const int totalEjercicios = 9;
+
+  static const Color bgColor = Colors.white;
+  static const Color mainText = Color(0xFF111111);
+  static const Color softText = Color(0xFF6B7280);
+  static const Color primary = Color(0xFF58CFC6);
+  static const Color primaryDark = Color(0xFF1AAFA5);
+  static const Color cardBorder = Color(0xFFE5E7EB);
+  static const Color disabledColor = Color(0xFFD1D5DB);
+  static const Color correctColor = Color(0xFF10B981);
+  static const Color wrongColor = Color(0xFFEF4444);
+
   @override
   void initState() {
     super.initState();
@@ -32,18 +45,22 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
   }
 
   Future<void> cargarEjercicio() async {
-    final query =
-        await FirebaseFirestore.instance
-            .collection('ejercicios')
-            .where('temaId', isEqualTo: 'introduccion_algoritmos')
-            .where('orden', isEqualTo: widget.orden)
-            .where('activo', isEqualTo: true)
-            .limit(1)
-            .get();
+    try {
+      final query =
+          await FirebaseFirestore.instance
+              .collection('ejercicios')
+              .where('temaId', isEqualTo: 'introduccion_algoritmos')
+              .where('orden', isEqualTo: widget.orden)
+              .where('activo', isEqualTo: true)
+              .limit(1)
+              .get();
 
-    if (query.docs.isNotEmpty) {
-      ejercicio = query.docs.first.data();
-      ejercicio!['docId'] = query.docs.first.id;
+      if (query.docs.isNotEmpty) {
+        ejercicio = query.docs.first.data();
+        ejercicioId = query.docs.first.id;
+      }
+    } catch (e) {
+      debugPrint('Error al cargar ejercicio: $e');
     }
 
     if (mounted) {
@@ -54,12 +71,19 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
   }
 
   Future<void> responder() async {
-    if (ejercicio == null || opcionSeleccionada == null || guardando) return;
+    if (ejercicio == null ||
+        ejercicioId == null ||
+        opcionSeleccionada == null ||
+        guardando) {
+      return;
+    }
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final esCorrecta = opcionSeleccionada == ejercicio!['respuestaCorrecta'];
+    final respuestaCorrecta = ejercicio!['respuestaCorrecta'] as String;
+    final esCorrecta = opcionSeleccionada == respuestaCorrecta;
+    final puntos = ejercicio!['puntos'] ?? 0;
 
     setState(() {
       guardando = true;
@@ -67,40 +91,83 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
       correcta = esCorrecta;
     });
 
-    final progresoRef = FirebaseFirestore.instance
+    final userRef = FirebaseFirestore.instance
         .collection('users')
-        .doc(user.uid)
+        .doc(user.uid);
+
+    final progresoRef = userRef
         .collection('progreso')
         .doc('introduccion_algoritmos');
 
-    await progresoRef.set({
-      'teoriaVista': true,
-      'ejerciciosIntentados': FieldValue.increment(1),
-      'ejerciciosCorrectos':
-          esCorrecta ? FieldValue.increment(1) : FieldValue.increment(0),
-      'ultimoEjercicio':
-          esCorrecta ? (widget.orden < 9 ? widget.orden + 1 : 9) : widget.orden,
-      'completado': esCorrecta ? widget.orden == 9 : false,
-    }, SetOptions(merge: true));
+    final ejercicioProgresoRef = progresoRef
+        .collection('ejercicios')
+        .doc(ejercicioId);
 
-    await progresoRef.collection('ejercicios').doc(ejercicio!['docId']).set({
-      'orden': widget.orden,
-      'respondido': true,
-      'correcto': esCorrecta,
-    }, SetOptions(merge: true));
+    final ejercicioProgresoDoc = await ejercicioProgresoRef.get();
+
+    final yaRespondidoCorrecto =
+        ejercicioProgresoDoc.exists &&
+        (ejercicioProgresoDoc.data()?['correcto'] ?? false) == true;
 
     if (esCorrecta) {
-      final puntos = ejercicio!['puntos'] ?? 150;
+      final siguienteEjercicio =
+          widget.orden < totalEjercicios ? widget.orden + 1 : totalEjercicios;
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'puntos': FieldValue.increment(puntos),
+      await progresoRef.set({
+        'teoriaVista': true,
+        'ejerciciosIntentados': FieldValue.increment(1),
+        'ejerciciosCorrectos':
+            yaRespondidoCorrecto
+                ? FieldValue.increment(0)
+                : FieldValue.increment(1),
+        'ultimoEjercicio': siguienteEjercicio,
+        'completado': widget.orden == totalEjercicios,
+        'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+
+      // ✅ CORRECCIÓN: no sobrescribir puntos si ya era correcto
+      if (!yaRespondidoCorrecto) {
+        await ejercicioProgresoRef.set({
+          'orden': widget.orden,
+          'respondido': true,
+          'correcto': true,
+          'puntosGanados': puntos,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        await userRef.set({
+          'puntos': FieldValue.increment(puntos),
+        }, SetOptions(merge: true));
+      } else {
+        await ejercicioProgresoRef.set({
+          'orden': widget.orden,
+          'respondido': true,
+          'correcto': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
 
       if (mounted) {
         setState(() {
           mostrarPremio = true;
         });
       }
+    } else {
+      await progresoRef.set({
+        'teoriaVista': true,
+        'ejerciciosIntentados': FieldValue.increment(1),
+        'ultimoEjercicio': widget.orden,
+        'completado': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await ejercicioProgresoRef.set({
+        'orden': widget.orden,
+        'respondido': true,
+        'correcto': false,
+        'puntosGanados': 0,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
     }
 
     if (mounted) {
@@ -126,20 +193,18 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
   Widget build(BuildContext context) {
     if (cargando) {
       return const Scaffold(
-        backgroundColor: Color(0xFF050816),
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF59DBD7)),
-        ),
+        backgroundColor: bgColor,
+        body: Center(child: CircularProgressIndicator(color: primary)),
       );
     }
 
     if (ejercicio == null) {
       return const Scaffold(
-        backgroundColor: Color(0xFF050816),
+        backgroundColor: bgColor,
         body: Center(
           child: Text(
             'No se encontró el ejercicio',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: mainText),
           ),
         ),
       );
@@ -148,7 +213,7 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
     final opciones = List<String>.from(ejercicio!['opciones']);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF050816),
+      backgroundColor: bgColor,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -156,13 +221,12 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
             child: Stack(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
                   child:
                       mostrandoTeoria
                           ? _buildTeoria()
                           : _buildPregunta(opciones),
                 ),
-
                 if (mostrarPremio) _buildPremioOverlay(),
               ],
             ),
@@ -176,71 +240,45 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(progressFactor: widget.orden / 9),
-        const SizedBox(height: 24),
+        _buildHeader(progressFactor: widget.orden / totalEjercicios),
+        const SizedBox(height: 30),
         Text(
           ejercicio!['teoriaTitulo'] ?? ejercicio!['pregunta'],
           style: const TextStyle(
-            color: Colors.white,
-            fontSize: 28,
+            color: mainText,
+            fontSize: 30,
             fontWeight: FontWeight.w900,
             height: 1.1,
           ),
         ),
-        const SizedBox(height: 24),
-        Text(
-          ejercicio!['teoriaTexto'] ?? 'Aquí irá la teoría de este ejercicio.',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            height: 1.6,
+        const SizedBox(height: 22),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: cardBorder),
+          ),
+          child: Text(
+            ejercicio!['teoriaTexto'] ?? 'Aquí irá la teoría del ejercicio.',
+            style: const TextStyle(
+              color: mainText,
+              fontSize: 17,
+              height: 1.5,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
-        const SizedBox(height: 24),
-        if ((ejercicio!['tip'] ?? '').toString().isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF111A31),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF24314E)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.lightbulb_outline, color: Color(0xFFFFD45C)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    ejercicio!['tip'],
-                    style: const TextStyle(color: Colors.white70, fontSize: 16),
-                  ),
-                ),
-              ],
-            ),
-          ),
         const Spacer(),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () {
-              setState(() {
-                mostrandoTeoria = false;
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF59DBD7),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(22),
-              ),
-            ),
-            child: const Text(
-              'SIGUIENTE',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-            ),
-          ),
+        _mainButton(
+          text: 'CONTINUAR',
+          enabled: true,
+          onPressed: () {
+            setState(() {
+              mostrandoTeoria = false;
+            });
+          },
         ),
       ],
     );
@@ -250,46 +288,58 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(progressFactor: widget.orden / 9),
-        const SizedBox(height: 18),
-        const Text(
-          'EJERCICIO',
-          style: TextStyle(
-            color: Color(0xFF59DBD7),
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1,
+        _buildHeader(progressFactor: widget.orden / totalEjercicios),
+        const SizedBox(height: 22),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFFFFD),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: primary),
+          ),
+          child: const Text(
+            'EJERCICIO',
+            style: TextStyle(
+              color: primaryDark,
+              fontWeight: FontWeight.w900,
+              fontSize: 13,
+              letterSpacing: 1,
+            ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 18),
         Text(
           ejercicio!['pregunta'],
           style: const TextStyle(
-            color: Colors.white,
+            color: mainText,
             fontSize: 28,
             fontWeight: FontWeight.w900,
-            height: 1.1,
+            height: 1.15,
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 16),
         if ((ejercicio!['tip'] ?? '').toString().isNotEmpty)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            margin: const EdgeInsets.only(bottom: 18),
+            margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-              color: const Color(0xFF111A31),
+              color: const Color(0xFFFFFBEB),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF24314E)),
+              border: Border.all(color: const Color(0xFFFDE68A)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.lightbulb_outline, color: Color(0xFFFFD45C)),
+                const Icon(Icons.lightbulb_outline, color: Color(0xFFF59E0B)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     ejercicio!['tip'],
-                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                    style: const TextStyle(
+                      color: mainText,
+                      fontSize: 15,
+                      height: 1.3,
+                    ),
                   ),
                 ),
               ],
@@ -300,30 +350,41 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
             itemCount: opciones.length,
             itemBuilder: (context, index) {
               final opcion = opciones[index];
+              final letra = String.fromCharCode(65 + index);
               final seleccionada = opcionSeleccionada == opcion;
               final esCorrecta = opcion == ejercicio!['respuestaCorrecta'];
 
-              Color borde = const Color(0xFF24314E);
-              Color fondo = const Color(0xFF111A31);
+              Color fondo = Colors.white;
+              Color borde = cardBorder;
+              Color letraFondo = const Color(0xFFF3F4F6);
+              Color letraColor = softText;
+              Color textoColor = mainText;
               IconData? icono;
-              Color iconoColor = Colors.white;
 
               if (!respondido && seleccionada) {
-                borde = const Color(0xFF59DBD7);
-                fondo = const Color(0xFF16263A);
+                fondo = const Color(0xFFEFFFFD);
+                borde = primary;
+                letraFondo = primary;
+                letraColor = Colors.white;
               }
 
               if (respondido) {
+                if (esCorrecta) {
+                  fondo = const Color(0xFFECFDF5);
+                  borde = correctColor;
+                  letraFondo = correctColor;
+                  letraColor = Colors.white;
+                  textoColor = correctColor;
+                  icono = Icons.check_rounded;
+                }
+
                 if (seleccionada && !esCorrecta) {
-                  borde = const Color(0xFFFF6A6A);
-                  fondo = const Color(0xFF3A161A);
-                  icono = Icons.close;
-                  iconoColor = const Color(0xFFFF6A6A);
-                } else if (esCorrecta) {
-                  borde = const Color(0xFF67E2D7);
-                  fondo = const Color(0xFF163331);
-                  icono = Icons.check;
-                  iconoColor = const Color(0xFF67E2D7);
+                  fondo = const Color(0xFFFEF2F2);
+                  borde = wrongColor;
+                  letraFondo = wrongColor;
+                  letraColor = Colors.white;
+                  textoColor = wrongColor;
+                  icono = Icons.close_rounded;
                 }
               }
 
@@ -340,48 +401,57 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
                           },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 20,
+                      horizontal: 16,
+                      vertical: 18,
                     ),
                     decoration: BoxDecoration(
                       color: fondo,
                       borderRadius: BorderRadius.circular(22),
                       border: Border.all(color: borde, width: 2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x08000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: Row(
                       children: [
                         Container(
-                          width: 34,
-                          height: 34,
+                          width: 38,
+                          height: 38,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color:
-                                icono != null
-                                    ? iconoColor.withOpacity(0.15)
-                                    : Colors.transparent,
-                            border: Border.all(color: borde, width: 2),
+                            color: letraFondo,
                           ),
-                          child:
-                              icono != null
-                                  ? Icon(icono, color: iconoColor, size: 18)
-                                  : null,
+                          child: Center(
+                            child:
+                                icono == null
+                                    ? Text(
+                                      letra,
+                                      style: TextStyle(
+                                        color: letraColor,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 16,
+                                      ),
+                                    )
+                                    : Icon(
+                                      icono,
+                                      color: Colors.white,
+                                      size: 22,
+                                    ),
+                          ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 14),
                         Expanded(
                           child: Text(
                             opcion,
                             style: TextStyle(
-                              color:
-                                  respondido && esCorrecta
-                                      ? const Color(0xFF67E2D7)
-                                      : respondido &&
-                                          seleccionada &&
-                                          !esCorrecta
-                                      ? const Color(0xFFFF7B7B)
-                                      : Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              height: 1.3,
+                              color: textoColor,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              height: 1.25,
                             ),
                           ),
                         ),
@@ -394,71 +464,46 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
           ),
         ),
         if (respondido && !correcta)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: intentarDeNuevo,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF9C9C),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(22),
-                ),
-              ),
-              child: const Text(
-                'INTENTAR DE NUEVO',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-              ),
-            ),
+          _mainButton(
+            text: 'INTENTAR DE NUEVO',
+            enabled: true,
+            backgroundColor: wrongColor,
+            onPressed: intentarDeNuevo,
           ),
         if (!respondido)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: opcionSeleccionada == null ? null : responder,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF59DBD7),
-                disabledBackgroundColor: const Color(0xFF2B3952),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(22),
-                ),
-              ),
-              child:
-                  guardando
-                      ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                      : const Text(
-                        'CONTINUAR',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-            ),
+          _mainButton(
+            text: guardando ? '' : 'COMPLETAR',
+            enabled: opcionSeleccionada != null && !guardando,
+            onPressed: responder,
+            loading: guardando,
           ),
       ],
     );
   }
 
   Widget _buildHeader({required double progressFactor}) {
+    final puntos = ejercicio?['puntos'] ?? 0;
+
     return Row(
       children: [
-        _circleButton(icon: Icons.close, onTap: () => Navigator.pop(context)),
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFFF3F4F6),
+            ),
+            child: const Icon(Icons.close_rounded, color: mainText, size: 26),
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Container(
-            height: 14,
+            height: 13,
             decoration: BoxDecoration(
-              color: const Color(0xFF1D2335),
+              color: const Color(0xFFE5E7EB),
               borderRadius: BorderRadius.circular(30),
             ),
             child: FractionallySizedBox(
@@ -466,7 +511,7 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
               widthFactor: progressFactor,
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF59DBD7),
+                  color: primary,
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
@@ -475,16 +520,18 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
         ),
         const SizedBox(width: 12),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
-            color: const Color(0xFF122332),
-            borderRadius: BorderRadius.circular(14),
+            color: const Color(0xFFEFFFFD),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: primary),
           ),
           child: Text(
-            '+${ejercicio?['puntos'] ?? 150}',
+            '+$puntos',
             style: const TextStyle(
-              color: Color(0xFF59DBD7),
+              color: primaryDark,
               fontWeight: FontWeight.w900,
+              fontSize: 14,
             ),
           ),
         ),
@@ -492,106 +539,109 @@ class _EjercicioAlgoritmosPageState extends State<EjercicioAlgoritmosPage> {
     );
   }
 
-  Widget _buildPremioOverlay() {
-    final puntos = ejercicio?['puntos'] ?? 150;
-
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.45),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 260,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 28,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF64E4E0), Color(0xFF7ED7B0)],
-                    ),
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x553CE4DF),
-                        blurRadius: 18,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.star_rounded,
-                        color: Colors.white,
-                        size: 62,
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        '+$puntos',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 42,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        '¡Puntos Ganados!',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 26),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: continuarDespuesDePremio,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF59DBD7),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                    ),
-                    child: const Text(
-                      'CONTINUAR',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+  Widget _mainButton({
+    required String text,
+    required bool enabled,
+    required VoidCallback onPressed,
+    Color backgroundColor = primary,
+    bool loading = false,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: enabled ? onPressed : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          disabledBackgroundColor: disabledColor,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
           ),
         ),
+        child:
+            loading
+                ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
+                  ),
+                )
+                : Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
       ),
     );
   }
 
-  Widget _circleButton({required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
+  Widget _buildPremioOverlay() {
+    final puntos = ejercicio?['puntos'] ?? 0;
+
+    return Positioned.fill(
       child: Container(
-        width: 46,
-        height: 46,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          color: Color(0xFF202437),
+        color: Colors.black,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 34),
+              decoration: BoxDecoration(
+                color: primary,
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 22,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.star_rounded, color: Colors.white, size: 76),
+                  const SizedBox(height: 12),
+                  Text(
+                    '+$puntos',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 46,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '¡Puntos ganados!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 26),
+                  _mainButton(
+                    text:
+                        widget.orden == totalEjercicios
+                            ? 'FINALIZAR'
+                            : 'CONTINUAR',
+                    enabled: true,
+                    backgroundColor: Colors.white,
+                    onPressed: continuarDespuesDePremio,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-        child: Icon(icon, color: Colors.white),
       ),
     );
   }

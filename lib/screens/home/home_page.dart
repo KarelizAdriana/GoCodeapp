@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'intro_algoritmos_path_page.dart';
-import 'welcome_page.dart';
+import '../intro_algoritmos_path_page.dart';
+import '../auth/welcome_page.dart';
+import 'avance_page.dart';
+import 'perfil_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -115,8 +117,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
     return Container(
       color: bgColor,
       child: Center(
@@ -219,117 +219,83 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            endDrawer: Drawer(
-              backgroundColor: bgColor,
-              child: SafeArea(
-                child: FutureBuilder<Map<String, dynamic>?>(
-                  future: obtenerDatosUsuario(),
-                  builder: (context, snapshot) {
-                    final data = snapshot.data;
 
-                    final nombre =
-                        data?['nombre'] ?? user?.displayName ?? 'Sin nombre';
-                    final correo =
-                        data?['correo'] ?? user?.email ?? 'Sin correo';
-                    final puntos = data?['puntos']?.toString() ?? '0';
-                    final nivel = data?['nivelActual']?.toString() ?? '1';
-
-                    return ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        Container(
-                          width: 78,
-                          height: 78,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Icon(
-                            Icons.person_outline,
-                            color: Color.fromARGB(255, 10, 255, 235),
-                            size: 38,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        _datoPerfil('Nombre', nombre),
-                        _datoPerfil('Correo', correo),
-                        _datoPerfil('Nivel actual', nivel),
-                        _datoPerfil('Puntos', puntos),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ),
-            body: SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _emptyHeroCard(),
-                    const SizedBox(height: 20),
-                    _courseGrid(),
-                    const SizedBox(height: 20),
-                    _infoCard(
-                      title: 'Tu progreso',
-                      subtitle: 'Sigue aprendiendo y avanza paso a paso.',
-                      trailing: OutlinedButton(
-                        onPressed: () {},
-                        style: _outlineButtonStyle(),
-                        child: const Text('Ver avance'),
-                      ),
-                      leading: SizedBox(
-                        width: 52,
-                        height: 52,
-                        child: Stack(
-                          alignment: Alignment.center,
+            body:
+                currentTab == 1
+                    ? const SafeArea(child: AvancePage())
+                    : currentTab == 2
+                    ? const SafeArea(child: PerfilPage())
+                    : SafeArea(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const SizedBox(
-                              width: 52,
-                              height: 52,
-                              child: CircularProgressIndicator(
-                                value: 0.2,
-                                strokeWidth: 4,
-                                backgroundColor: Color(0xFFE5E7EB),
-                                color: navyDark,
+                            _emptyHeroCard(),
+                            const SizedBox(height: 20),
+                            _courseGrid(),
+                            const SizedBox(height: 20),
+                            _infoCard(
+                              title: 'Tu progreso',
+                              subtitle:
+                                  'Sigue aprendiendo y avanza paso a paso.',
+                              trailing: OutlinedButton(
+                                onPressed: () {},
+                                style: _outlineButtonStyle(),
+                                child: const Text('Ver avance'),
+                              ),
+                              leading: SizedBox(
+                                width: 52,
+                                height: 52,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      width: 52,
+                                      height: 52,
+                                      child: CircularProgressIndicator(
+                                        value: 0.2,
+                                        strokeWidth: 4,
+                                        backgroundColor: Color(0xFFE5E7EB),
+                                        color: navyDark,
+                                      ),
+                                    ),
+                                    const Text(
+                                      '20%',
+                                      style: TextStyle(
+                                        color: mainText,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            const Text(
-                              '20%',
-                              style: TextStyle(
-                                color: mainText,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                            const SizedBox(height: 12),
+                            _infoCard(
+                              title: 'Racha',
+                              subtitle: '2 días seguidos. Mantén tu ritmo.',
+                              leading: _smallBoxIcon(
+                                Icons.local_fire_department_outlined,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _infoCard(
+                              title: 'Desafío diario',
+                              subtitle:
+                                  'Completa una lección y gana experiencia.',
+                              leading: _smallBoxIcon(Icons.smart_toy_outlined),
+                              trailing: OutlinedButton(
+                                onPressed: () {},
+                                style: _outlineButtonStyle(),
+                                child: const Text('Comenzar'),
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    _infoCard(
-                      title: 'Racha',
-                      subtitle: '2 días seguidos. Mantén tu ritmo.',
-                      leading: _smallBoxIcon(
-                        Icons.local_fire_department_outlined,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _infoCard(
-                      title: 'Desafío diario',
-                      subtitle: 'Completa una lección y gana experiencia.',
-                      leading: _smallBoxIcon(Icons.smart_toy_outlined),
-                      trailing: OutlinedButton(
-                        onPressed: () {},
-                        style: _outlineButtonStyle(),
-                        child: const Text('Comenzar'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
             bottomNavigationBar: Container(
               margin: const EdgeInsets.fromLTRB(18, 0, 18, 16),
               padding: const EdgeInsets.symmetric(vertical: 6),
@@ -501,32 +467,6 @@ class _HomePageState extends State<HomePage> {
       textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
     );
   }
-
-  Widget _datoPerfil(String titulo, String valor) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            titulo,
-            style: const TextStyle(
-              color: mainText,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(valor, style: const TextStyle(color: softText, fontSize: 14)),
-        ],
-      ),
-    );
-  }
 }
 
 class _CourseCard extends StatelessWidget {
@@ -549,10 +489,7 @@ class _CourseCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: course.color,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: course.color.withOpacity(0.9),
-              width: 1.6,
-            ),
+            border: Border.all(color: course.color, width: 1.6),
             boxShadow: const [
               BoxShadow(
                 color: Color.fromARGB(51, 255, 255, 255),

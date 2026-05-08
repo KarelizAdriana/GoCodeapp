@@ -27,8 +27,9 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
   static const Color _nodeBottom = Color(0xFF2ABFB5);
 
   // Más oscuro para bloqueados
-  static const Color _lockedNodeTop = Color(0xFF4B6C78);
-  static const Color _lockedNodeBottom = Color(0xFF2F4F5B);
+  static const Color _lockedNodeTop = Color(0xFFE5E7EB);
+  static const Color _lockedNodeBottom = Color(0xFFD1D5DB);
+  static const Color _lockedIconColor = Color(0xFF9CA3AF);
 
   static const Color _ringColor = Color(0xFFFFC914);
   static const Color _shadowColor = Color.fromARGB(40, 0, 0, 0);
@@ -107,14 +108,10 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
       if (ultimoEjercicio < 1) ultimoEjercicio = 1;
       if (ultimoEjercicio > totalEjercicios) ultimoEjercicio = totalEjercicios;
 
-      final ejerciciosSnap = await progresoRef.collection('ejercicios').get();
-
-      ejerciciosCompletados =
-          ejerciciosSnap.docs
-              .where((d) => (d.data()['correcto'] ?? false) == true)
-              .map((d) => d.data()['orden'] as int)
-              .toSet();
-
+      ejerciciosCompletados = {};
+      for (int i = 1; i < ultimoEjercicio; i++) {
+        ejerciciosCompletados.add(i);
+      }
       if (mounted) {
         setState(() {
           cargando = false;
@@ -141,30 +138,17 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
   }
 
   int get nodoActivo {
-    if (ejerciciosCompletados.isEmpty) {
-      return 1;
-    }
+    if (ultimoEjercicio < 1) return 1;
 
-    final maxCompletado = ejerciciosCompletados.reduce((a, b) => a > b ? a : b);
-
-    // Si ya completó todos, deja el amarillo en el último
-    if (maxCompletado >= totalEjercicios) {
+    if (ultimoEjercicio > totalEjercicios) {
       return totalEjercicios;
     }
 
-    // Si ya completó algunos, el amarillo avanza al siguiente desbloqueado
-    final siguiente = maxCompletado + 1;
-
-    if (siguiente > ultimoEjercicio) {
-      return ultimoEjercicio;
-    }
-
-    return siguiente;
+    return ultimoEjercicio;
   }
 
   bool get mostrarEmpezar {
-    // Se muestra solo antes de empezar realmente
-    return !teoriaVista && ejerciciosCompletados.isEmpty;
+    return !teoriaVista && ultimoEjercicio == 1;
   }
 
   @override
@@ -396,7 +380,9 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
     required bool activo,
     required bool bloqueado,
   }) {
-    // Si está activo, lleva el aro amarillo
+    final Color innerColor = bloqueado ? _lockedNodeTop : _cardColor;
+    final Color iconColor = bloqueado ? _lockedIconColor : Colors.white;
+
     if (activo) {
       return Container(
         width: 118,
@@ -418,11 +404,11 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
             height: 94,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: bloqueado ? _lockedNodeTop : _cardColor,
+              color: innerColor,
             ),
             child: Icon(
               completado ? Icons.check_rounded : Icons.star_rounded,
-              color: Colors.white,
+              color: iconColor,
               size: 46,
             ),
           ),
@@ -444,13 +430,10 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
         child: Container(
           width: 94,
           height: 94,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: bloqueado ? _lockedNodeTop : _cardColor,
-          ),
+          decoration: BoxDecoration(shape: BoxShape.circle, color: innerColor),
           child: Icon(
             completado ? Icons.check_rounded : Icons.star_rounded,
-            color: Colors.white,
+            color: iconColor,
             size: 46,
           ),
         ),
@@ -464,7 +447,10 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
     required bool activo,
     required bool bloqueado,
   }) {
-    // Nodo actual con aro amarillo
+    final Color topColor = bloqueado ? _lockedNodeTop : _nodeTop;
+    final Color bottomColor = bloqueado ? _lockedNodeBottom : _nodeBottom;
+    final Color iconColor = bloqueado ? _lockedIconColor : Colors.white;
+
     if (activo) {
       return Container(
         width: 102,
@@ -486,14 +472,11 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
             height: 82,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color:
-                  completado
-                      ? _cardColor
-                      : (bloqueado ? _lockedNodeTop : _cardColor),
+              color: bloqueado ? _lockedNodeTop : _cardColor,
             ),
             child: Icon(
               completado ? Icons.check_rounded : icon,
-              color: Colors.white,
+              color: bloqueado ? _lockedIconColor : Colors.white,
               size: 34,
             ),
           ),
@@ -513,7 +496,7 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
             child: Container(
               height: 74,
               decoration: BoxDecoration(
-                color: bloqueado ? _lockedNodeBottom : _nodeBottom,
+                color: bottomColor,
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: const [
                   BoxShadow(
@@ -532,12 +515,12 @@ class _IntroAlgoritmosPathPageState extends State<IntroAlgoritmosPathPage> {
             child: Container(
               height: 74,
               decoration: BoxDecoration(
-                color: bloqueado ? _lockedNodeTop : _nodeTop,
+                color: topColor,
                 borderRadius: BorderRadius.circular(28),
               ),
               child: Icon(
                 completado ? Icons.check_rounded : icon,
-                color: Colors.white,
+                color: iconColor,
                 size: 34,
               ),
             ),

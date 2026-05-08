@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
-import 'screens/home_page.dart';
-import 'screens/welcome_page.dart';
+import 'screens/home/home_page.dart';
+import 'screens/auth/welcome_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
